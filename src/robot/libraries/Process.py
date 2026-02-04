@@ -30,8 +30,15 @@ from robot.api.deco import library
 from robot.api.types import Secret
 from robot.errors import TimeoutExceeded
 from robot.utils import (
-    cmdline2list, ConnectionCache, console_decode, console_encode, NormalizedDict,
-    secs_to_timestr, system_decode, system_encode, WINDOWS
+    cmdline2list,
+    ConnectionCache,
+    console_decode,
+    console_encode,
+    NormalizedDict,
+    secs_to_timestr,
+    system_decode,
+    system_encode,
+    WINDOWS,
 )
 from robot.version import get_version
 
@@ -1067,6 +1074,61 @@ class Process:
             )
         except AttributeError:
             raise RuntimeError(f"Unsupported signal '{name}'.")
+
+    def send_input_to_process(
+        self,
+        input_data: "str | bytes | None" = None,
+        handle: Handle = None,
+        end_of_line: "str | None" = "\n",
+    ) -> None:
+        """Sends data to the process standard input without waiting for completion.
+
+        If ``handle`` is not given, uses the current `active process`.
+
+        ``input_data`` is the data to be sent to the process stdin. It can be
+        a string or bytes. If given as a string, it will be encoded using the
+        output encoding configured for the process.
+
+        ``end_of_line`` is appended after the input data. It defaults to ``\\n``
+        (newline). Set to ``None`` to send data without appending anything.
+
+        Note that this keyword does NOT wait for the process to complete.
+        Use `Wait For Process` to wait for completion and get the results.
+        The process must be started with ``stdin=PIPE``.
+
+        Example:
+        | ${process} = | Start Process | python | -i | stdin=PIPE | stdout=PIPE | stderr=PIPE |
+        | Send Input To Process | print('Hello') |
+        | Send Input To Process | print('World') |
+        | ${result} = | Wait For Process | ${process} |
+        | Should Contain | ${result.stdout} | Hello |
+        """
+        process = self._processes[handle]
+        if process.stdin is None:
+            raise RuntimeError(
+                "Process started without stdin=PIPE. Cannot send data to stdin."
+            )
+
+        # Encode input data if it's a string
+        if isinstance(input_data, str):
+            data_to_send = input_data
+            if end_of_line is not None:
+                data_to_send += end_of_line
+            input_bytes = console_encode(data_to_send, force=True)
+        elif isinstance(input_data, bytes):
+            input_bytes = input_data
+            if end_of_line is not None:
+                input_bytes += console_encode(end_of_line, force=True)
+        else:
+            input_bytes = (
+                console_encode(end_of_line, force=True)
+                if end_of_line is not None
+                else b""
+            )
+
+        logger.info(f"Sending data to process stdin.")
+        process.stdin.write(input_bytes)
+        process.stdin.flush()
 
     def get_process_id(self, handle: Handle = None) -> int:
         """Returns the process ID (pid) of the process as an integer.
