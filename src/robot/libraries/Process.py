@@ -1100,8 +1100,11 @@ class Process:
         | ${process} = | Start Process | python | -i | stdin=PIPE | stdout=PIPE | stderr=PIPE |
         | Send Input To Process | print('Hello') |
         | Send Input To Process | print('World') |
+        | Send Input To Process | 2+2 | end_of_line=${None} |
+        | Send Input To Process | *2 |
         | ${result} = | Wait For Process | ${process} |
         | Should Contain | ${result.stdout} | Hello |
+        | Should Contain | ${result.stdout} | 6 |
         """
         process = self._processes[handle]
         if process.stdin is None:
