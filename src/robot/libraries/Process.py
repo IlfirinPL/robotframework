@@ -32,6 +32,7 @@ from robot.errors import TimeoutExceeded
 from robot.utils import (
     cmdline2list, ConnectionCache, console_decode, console_encode, NormalizedDict,
     secs_to_timestr, system_decode, system_encode, WINDOWS
+)
 from robot.version import get_version
 
 LOCALE_ENCODING = "locale" if sys.version_info >= (3, 10) else None
