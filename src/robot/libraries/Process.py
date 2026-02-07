@@ -30,16 +30,8 @@ from robot.api.deco import library
 from robot.api.types import Secret
 from robot.errors import TimeoutExceeded
 from robot.utils import (
-    cmdline2list,
-    ConnectionCache,
-    console_decode,
-    console_encode,
-    NormalizedDict,
-    secs_to_timestr,
-    system_decode,
-    system_encode,
-    WINDOWS,
-)
+    cmdline2list, ConnectionCache, console_decode, console_encode, NormalizedDict,
+    secs_to_timestr, system_decode, system_encode, WINDOWS
 from robot.version import get_version
 
 LOCALE_ENCODING = "locale" if sys.version_info >= (3, 10) else None
@@ -1132,6 +1124,69 @@ class Process:
         logger.info(f"Sending data to process stdin.")
         process.stdin.write(input_bytes)
         process.stdin.flush()
+
+    def read_output_from_process(
+        self,
+        handle: Handle = None,
+        stream: "str" = "stdout",
+        lines: "int | None" = 1,
+    ):
+        """Read process output using ``communicate()``.
+
+        ``handle`` selects the process (uses active process if omitted).
+
+        ``stream`` selects which stream to return: ``stdout``, ``stderr``
+        or ``both``. ``both`` returns a tuple ``(stdout, stderr)``.
+
+        ``lines`` limits returned output to the last N lines. Default is
+        ``1``. Set to ``None`` or a non-positive value to return full output.
+
+        This keyword uses a short timeout with ``communicate()`` to fetch
+        currently available output. If the process has not finished, partial
+        output is returned.
+        """
+        process = self._processes[handle]
+        result_obj = self._results.get(process)
+
+        try:
+            out, err = process.communicate(timeout=0.1)
+        except subprocess.TimeoutExpired as exc:
+            out = exc.output
+            err = exc.stderr
+
+        out = out or b""
+        err = err or b""
+
+        encoding = result_obj._output_encoding if result_obj else "CONSOLE"
+        out_text = console_decode(out, encoding)
+        err_text = console_decode(err, encoding)
+
+        out_text = out_text.replace("\r\n", "\n")
+        err_text = err_text.replace("\r\n", "\n")
+        if out_text.endswith("\n"):
+            out_text = out_text[:-1]
+        if err_text.endswith("\n"):
+            err_text = err_text[:-1]
+
+        def _trim(text: str) -> str:
+            if lines is None or lines <= 0:
+                return text
+            parts = text.splitlines()
+            if len(parts) <= lines:
+                return text
+            return "\n".join(parts[-lines:])
+
+        out_text = _trim(out_text)
+        err_text = _trim(err_text)
+
+        stream = (stream or "stdout").lower()
+        if stream == "stdout":
+            return out_text
+        if stream == "stderr":
+            return err_text
+        if stream == "both":
+            return out_text, err_text
+        raise RuntimeError("Invalid stream. Use 'stdout', 'stderr' or 'both'.")
 
     def get_process_id(self, handle: Handle = None) -> int:
         """Returns the process ID (pid) of the process as an integer.
